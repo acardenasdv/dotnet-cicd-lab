@@ -35,17 +35,21 @@ jobs:
         run: dotnet build --no-restore --configuration Release
       - name: Test con cobertura 
         run: >
-          dotnet test --no-build --configuration Release
+          dotnet test tests/CicdLab.Tests/CicdLab.Tests.csproj
+          --no-build --configuration Release
           --logger trx
           --results-directory ./TestResults
           --collect:"XPlat Code Coverage"
+      - name: Listar resultados generados (debug)
+        if: always()
+        run: find ./TestResults -type f 
 
       - name: Publicar resultados de tests en el PR
         uses: dorny/test-reporter@v1  
         if: always() # siempre se ejecuta, aunque fallen los tests
         with:
           name: Resultados de Tests
-          path: ./TestResults/*.trx
+          path: 'TestResults/**/*.trx'
           reporter: dotnet-trx
       - name: Subir artifact de resultados
         uses: actions/upload-artifact@v4
