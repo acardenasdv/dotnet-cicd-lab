@@ -6,20 +6,54 @@ on:
   push:
     branches: [ main ]
 
+permissions:
+    contents: read
+    checks: write  # necesario para que dorny/test-reporter publique el check
+    pull-requests: write # necesario para comentar cobertura en el PR (lo usamos más adelante)
+
 jobs:
-  hello-context:
+  build-and-test:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout código
         uses: actions/checkout@v4
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      
+      - name: Cache de paquetes NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+      - name: Restore 
+        run: dotnet restore
+      - name: Build
+        run: dotnet build --no-restore --configuration Release
+      - name: Test con cobertura 
+        run: >
+          dotnet test tests/CicdLab.Tests/CicdLab.Tests.csproj
+          --no-build --configuration Release
+          --logger trx
+          --results-directory ./TestResults
+          --collect:"XPlat Code Coverage"
+      - name: Listar resultados generados (debug)
+        if: always()
+        run: find ./TestResults -type f 
 
-      - name: Mostrar contexto del evento
-        run: |
-          echo "Evento: ${{ github.event_name }}"
-          echo "Rama/ref: ${{ github.ref }}"
-          echo "SHA del commit: ${{ github.sha }}"
-          echo "Actor: ${{ github.actor }}"
-          echo "Repo: ${{ github.repository }}"
-
-      - name: Mostrar variables de entorno inyectadas por Actions
-        run: env | grep GITHUB_ | sort
+      - name: Publicar resultados de tests en el PR
+        uses: dorny/test-reporter@v1  
+        if: always() # siempre se ejecuta, aunque fallen los tests
+        with:
+          name: Resultados de Tests
+          path: 'TestResults/**/*.trx'
+          reporter: dotnet-trx
+      - name: Subir artifact de resultados
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: TestResults/
+          retention-days: 7
